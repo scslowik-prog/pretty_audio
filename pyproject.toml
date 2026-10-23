@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pretty_audio"
+version = "0.1.0"
+description = "A pretty-midi-like library for rendering realistic .wav/.mp3 audio samples."
+readme = "README.md"
+requires-python = ">=3.8"
+authors = [{ name = "pretty_audio" }]
+license = { text = "MIT" }
+dependencies = [
+    "numpy>=1.20",
+    "librosa>=0.9",
+    "soundfile>=0.10",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "black", "flake8"]
+
+[tool.setuptools.packages.find]
+include = ["pretty_audio*"]
