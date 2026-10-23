@@ -77,6 +77,102 @@ save_wav("output.wav", audio, sample_rate=pa.sample_rate)
 4. `synthesize()` walks every note, finds the matching region, loads the audio, pitch-shifts it from `root_pitch` to the note pitch, applies a velocity gain + ADSR envelope, and mixes it into a numpy buffer at the note's start time.
 5. The output is a float32 numpy array you can save as WAV with `io.save_wav`.
 
+## Adding your own instrument samples
+
+`pretty_audio` does not ship with instrument samples — you bring your own
+`.wav`/`.mp3`/`.mpeg` files and map them to MIDI pitches with `SampleRegion`.
+
+### 1. Where to find samples
+
+A great free source is the **University of Iowa Musical Instrument Samples**:
+
+https://theremin.music.uiowa.edu/mis.html
+
+It contains public-domain, single-note recordings of orchestral and band
+instruments (trumpet, flute, violin, guitar, etc.), often in multiple dynamic
+layers (soft / medium / loud). Files are typically `.au` or `.aif`.
+
+Other options:
+- Record your own instrument (one file per note × dynamic layer)
+- Free sample packs (search "free piano samples wav", etc.)
+- SoundFonts (`.sf2`) — extract individual WAVs from them
+
+### 2. Convert files to `.wav`
+
+Iowa MIS files are often `.au` or `.aif`. `pretty_audio` loads `.wav`
+natively (and `.mp3`/`.mpeg` via librosa), so convert first:
+
+```bash
+# Using ffmpeg (batch)
+for f in samples/iowa/*.au; do ffmpeg -i "$f" "${f%.au}.wav"; done
+```
+
+Or with Python:
+
+```python
+from pathlib import Path
+import soundfile as sf
+
+for au in Path("samples/iowa").glob("*.au"):
+    y, sr = sf.read(au)
+    sf.write(au.with_suffix(".wav"), y, sr, subtype="PCM_16")
+```
+
+### 3. Name files for automatic region building
+
+`build_regions_from_folder()` can auto-generate `SampleRegion` objects from
+filenames. The expected convention is:
+
+```
+<instrument>.<dynamic>.<string>.<lowNote><highNote>.wav
+```
+
+Example (guitar samples):
+
+```
+Guitar.ff.sulA.A2B2.wav   # fortissimo, A string, A2–B2 (MIDI 45–47)
+Guitar.mf.sulA.C3B3.wav   # mezzo-forte, A string, C3–B3 (MIDI 48–59)
+Guitar.pp.sulB.B3.wav     # pianissimo, B string, B3 only (MIDI 59)
+```
+
+- **Dynamic layer** maps to velocity: `pp` (0–42), `mp` (43–63), `mf` (64–84),
+  `f` (85–104), `ff` (105–127). You can customize this with `dynamic_map`.
+- **Pitch range** (`A2B2`) sets `note_low`/`note_high`. Single-note files
+  (`B3`) set both to the same pitch.
+- **Root pitch** defaults to the lower note of the range.
+
+### 4. Build regions and render
+
+```python
+from pretty_audio import PrettyAudio, Instrument, Note, build_regions_from_folder
+from pretty_audio.render import synthesize
+from pretty_audio.io import save_wav
+
+# Auto-build regions from a folder of converted .wav files
+regions = build_regions_from_folder("samples/trumpet")
+
+trumpet = Instrument(name="Trumpet")
+trumpet.regions = regions
+trumpet.notes = [
+    Note(start=0.0, end=1.0, pitch=60, velocity=100),  # C4, loud layer
+    Note(start=1.0, end=2.0, pitch=64, velocity=50),   # E4, soft layer
+]
+
+pa = PrettyAudio(sample_rate=44100)
+pa.add_instrument(trumpet)
+audio = synthesize(pa, duration=3.0)
+save_wav("trumpet_output.wav", audio, sample_rate=pa.sample_rate)
+```
+
+If your files use a different naming convention, pass a custom
+`parse_filename` callback to `build_regions_from_folder()`.
+
+### 5. Licensing
+
+Iowa MIS samples are public domain, but most other sample libraries are
+copyrighted. Only bundle samples you have rights to distribute, or point users
+to download them separately.
+
 ## Roadmap / open questions
 
 - **Stereo & pan:** currently mono. Add per-region stereo files and pan law.
